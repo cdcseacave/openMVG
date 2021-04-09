@@ -117,7 +117,7 @@ namespace stlplus
   // the set of all subdirectories
   std::vector<std::string> folder_subdirectories(const std::string& folder);
   // the set of all files
-  std::vector<std::string> folder_files(const std::string& folder);
+  std::vector<std::string> folder_files(const std::string& folder, bool parse_subdirs = false);
   // the set of all folders and files
   std::vector<std::string> folder_all(const std::string& folder);
   // the set of all folder contents matching a wildcard string

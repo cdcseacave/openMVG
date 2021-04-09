@@ -265,7 +265,7 @@ int main(int argc, char **argv)
     prior_w_info.first = true;
   }
 
-  std::vector<std::string> vec_image = stlplus::folder_files( sImageDir );
+  std::vector<std::string> vec_image = stlplus::folder_files( sImageDir, true );
   std::sort(vec_image.begin(), vec_image.end());
 
   // Configure an empty scene with Views and their corresponding cameras

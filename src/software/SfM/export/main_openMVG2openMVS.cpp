@@ -146,6 +146,9 @@ bool exportToOpenMVS(
     // Get image paths
     const std::string srcImage = stlplus::create_filespec(sfm_data.s_root_path, view->s_Img_path);
     const std::string imageName = stlplus::create_filespec(sOutDir, view->s_Img_path);
+    const std::string pathName = stlplus::folder_part(imageName);
+    if (!stlplus::is_folder(pathName))
+        stlplus::folder_create(pathName);
 
     if (sfm_data.IsPoseAndIntrinsicDefined(view))
     {

@@ -37,7 +37,7 @@ using namespace openMVG::sfm;
 
 /// Check that Kmatrix is a string like "f;0;ppx;0;f;ppy;0;0;1"
 /// With f,ppx,ppy as valid numerical value
-bool checkIntrinsicStringValidity(const std::string & Kmatrix, double & focal, double & ppx, double & ppy)
+bool checkIntrinsicStringValidity(const std::string & Kmatrix, double & focal, double & focal_ratio, double & ppx, double & ppy)
 {
   std::vector<std::string> vec_str;
   stl::split(Kmatrix, ';', vec_str);
@@ -55,6 +55,7 @@ bool checkIntrinsicStringValidity(const std::string & Kmatrix, double & focal, d
       return false;
     }
     if (i==0) focal = readvalue;
+    if (i==4) focal_ratio = readvalue/focal;
     if (i==2) ppx = readvalue;
     if (i==5) ppy = readvalue;
   }
@@ -205,7 +206,7 @@ int main(int argc, char **argv)
             << "--group_camera_model " << b_Group_camera_model << std::endl;
 
   // Expected properties for each image
-  double width = -1, height = -1, focal = -1, ppx = -1,  ppy = -1;
+  double width = -1, height = -1, focal = -1, focal_ratio = 1, ppx = -1,  ppy = -1;
 
   const EINTRINSIC e_User_camera_model = EINTRINSIC(i_User_camera_model);
 
@@ -231,7 +232,7 @@ int main(int argc, char **argv)
   }
 
   if (sKmatrix.size() > 0 &&
-    !checkIntrinsicStringValidity(sKmatrix, focal, ppx, ppy) )
+    !checkIntrinsicStringValidity(sKmatrix, focal, focal_ratio, ppx, ppy) )
   {
     std::cerr << "\nInvalid K matrix input" << std::endl;
     return EXIT_FAILURE;
@@ -282,7 +283,8 @@ int main(int argc, char **argv)
     ++iter_image, ++my_progress_bar )
   {
     // Read meta data to fill camera parameter (w,h,focal,ppx,ppy) fields.
-    width = height = ppx = ppy = focal = -1.0;
+    width = height = ppx = ppy = focal = -1;
+    focal_ratio = 1.0;
 
     const std::string sImageFilename = stlplus::create_filespec( sImageDir, *iter_image );
     const std::string sImFilenamePart = stlplus::filename_part(sImageFilename);
@@ -316,7 +318,7 @@ int main(int argc, char **argv)
     // Consider the case where the focal is provided manually
     if (sKmatrix.size() > 0) // Known user calibration K matrix
     {
-      if (!checkIntrinsicStringValidity(sKmatrix, focal, ppx, ppy))
+      if (!checkIntrinsicStringValidity(sKmatrix, focal, focal_ratio, ppx, ppy))
         focal = -1.0;
     }
     else // User provided focal length value
@@ -374,7 +376,7 @@ int main(int argc, char **argv)
       {
         case PINHOLE_CAMERA:
           intrinsic = std::make_shared<Pinhole_Intrinsic>
-            (width, height, focal, ppx, ppy);
+            (width, height, focal, focal*focal_ratio, ppx, ppy);
         break;
         case PINHOLE_CAMERA_RADIAL1:
           intrinsic = std::make_shared<Pinhole_Intrinsic_Radial_K1>

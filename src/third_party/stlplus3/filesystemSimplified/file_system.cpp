@@ -802,12 +802,22 @@ namespace stlplus
     return folder_wildcard(directory, "*", true, false);
   }
 
-  std::vector<std::string> folder_files (const std::string& directory)
+  std::vector<std::string> folder_files (const std::string& directory, bool parse_subdirs)
   {
-    return folder_wildcard(directory, "*", false, true);
+    std::vector<std::string> files = folder_wildcard(directory, "*", false, true);
+    if (parse_subdirs) {
+      const std::vector<std::string> subfolders = folder_subdirectories(directory);
+      for (const std::string& subfolder: subfolders) {
+        const std::vector<std::string> subfiles = folder_files(directory + preferred_separator + subfolder, true);
+        const std::string parent_folder = subfolder + preferred_separator;
+        for (const std::string& subfile: subfiles)
+            files.emplace_back(parent_folder + subfile);
+      }
+    }
+    return files;
   }
 
-  std::vector<std::string> folder_all(const std::string& directory)
+  std::vector<std::string> folder_all (const std::string& directory)
   {
     return folder_wildcard(directory, "*", true, true);
   }

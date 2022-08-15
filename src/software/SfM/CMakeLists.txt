@@ -44,6 +44,7 @@ target_link_libraries(openMVG_main_ComputeFeatures
     openMVG_multiview
     openMVG_sfm
     ${STLPLUS_LIBRARY}
+    SIFTGPU
     vlsift
 )
 if (MSVC)

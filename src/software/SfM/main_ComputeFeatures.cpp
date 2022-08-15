@@ -12,6 +12,7 @@
 #include "openMVG/features/akaze/image_describer_akaze_io.hpp"
 
 #include "openMVG/features/sift/SIFT_Anatomy_Image_Describer_io.hpp"
+#include "openMVG/features/sift/SIFTGPU_Image_Describer_io.hpp"
 #include "openMVG/image/image_io.hpp"
 #include "openMVG/features/regions_factory_io.hpp"
 #include "openMVG/sfm/sfm_data.hpp"
@@ -101,7 +102,8 @@ int main(int argc, char **argv)
         << "   SIFT (default),\n"
         << "   SIFT_ANATOMY,\n"
         << "   AKAZE_FLOAT: AKAZE with floating point descriptors,\n"
-        << "   AKAZE_MLDB:  AKAZE with binary descriptors\n"
+        << "   AKAZE_MLDB:  AKAZE with binary descriptors,\n"
+        << "   SIFT_GPU\n"
         << "[-u|--upright] Use Upright feature 0 or 1\n"
         << "[-p|--describerPreset]\n"
         << "  (used to control the Image_describer configuration):\n"
@@ -212,6 +214,12 @@ int main(int argc, char **argv)
       image_describer = AKAZE_Image_describer::create
         (AKAZE_Image_describer::Params(AKAZE::Params(), AKAZE_MLDB), !bUpRight);
     }
+    else
+    if (sImage_Describer_Method == "SIFT_GPU")
+    {
+      image_describer.reset(
+        new SIFTGPU_Image_describer(SIFTGPU_Image_describer::Params()));
+    }
     if (!image_describer)
     {
       OPENMVG_LOG_ERROR << "Cannot create the designed Image_describer:"
@@ -241,6 +249,12 @@ int main(int argc, char **argv)
       archive(cereal::make_nvp("regions_type", regionsType));
     }
   }
+#ifdef OPENMVG_USE_OPENMP
+  if (dynamic_cast<SIFTGPU_Image_describer*>(image_describer.get()))
+  {
+      iNumThreads = 1;
+  }
+#endif
 
   // Feature extraction routines
   // For each View of the SfM_Data container:

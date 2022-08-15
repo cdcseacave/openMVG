@@ -80,6 +80,12 @@ if (DEFINED OpenMVG_USE_INTERNAL_FLANN)
   add_subdirectory(flann)
 endif()
 
+if (DEFINED OpenMVG_USE_SIFTGPU)
+  #Configure SIFTGPU install
+  set(INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/include/openMVG/third_party/siftgpu)
+  add_subdirectory(siftgpu)
+endif()
+
 # Exif data parsing
 add_subdirectory(easyexif)
 

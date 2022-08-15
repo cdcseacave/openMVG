@@ -47,6 +47,9 @@ option(OpenMVG_USE_OPENCV "Build or not opencv+openMVG samples programs" OFF)
 # ==============================================================================
 option(OpenMVG_USE_OCVSIFT "Add or not OpenCV SIFT in available features" OFF)
 
+# Enable this to be able to use SIFTGPU in main_ComputeFeatures_SIFTGPU.
+option(OpenMVG_USE_SIFTGPU "Add or not SIFTGPU in available features" On)
+
 # ==============================================================================
 # Since the LiGT algorithm has a patent protection.
 # See header files in openMVG/multiview/LiGT for more informations.
@@ -518,6 +521,7 @@ message("** Enable code coverage generation: " ${OpenMVG_BUILD_COVERAGE})
 message("** Enable OpenMP parallelization: " ${OpenMVG_USE_OPENMP})
 message("** Build OpenCV+OpenMVG samples programs: " ${OpenMVG_USE_OPENCV})
 message("** Use OpenCV SIFT features: " ${OpenMVG_USE_OCVSIFT})
+message("** Use SIFTGPU features: " ${OpenMVG_USE_SIFTGPU})
 message("** Use LiGT for global translation estimation: " ${OpenMVG_USE_LIGT})
 
 message("\n")

@@ -70,6 +70,8 @@ int main(int argc, char **argv)
   std::string sImage_Describer_Method = "SIFT";
   bool bForce = false;
   std::string sFeaturePreset = "";
+  int iMaxNumFeatures = 0;
+  bool bRootSift = true;
 #ifdef OPENMVG_USE_OPENMP
   int iNumThreads = 0;
 #endif
@@ -82,6 +84,8 @@ int main(int argc, char **argv)
   cmd.add( make_option('u', bUpRight, "upright") );
   cmd.add( make_option('f', bForce, "force") );
   cmd.add( make_option('p', sFeaturePreset, "describerPreset") );
+  cmd.add( make_option('x', iMaxNumFeatures, "maxNumFeatures") );
+  cmd.add( make_option('r', bRootSift, "rootSift") );
 
 #ifdef OPENMVG_USE_OPENMP
   cmd.add( make_option('n', iNumThreads, "numThreads") );
@@ -128,6 +132,8 @@ int main(int argc, char **argv)
     << "--upright " << bUpRight << "\n"
     << "--describerPreset " << (sFeaturePreset.empty() ? "NORMAL" : sFeaturePreset) << "\n"
     << "--force " << bForce << "\n"
+    << "--maxNumFeatures " << iMaxNumFeatures << "\n"
+    << "--rootSift " << bRootSift << "\n"
 #ifdef OPENMVG_USE_OPENMP
     << "--numThreads " << iNumThreads << "\n"
 #endif
@@ -199,8 +205,9 @@ int main(int argc, char **argv)
     else
     if (sImage_Describer_Method == "SIFT_ANATOMY")
     {
-      image_describer.reset(
-        new SIFT_Anatomy_Image_describer(SIFT_Anatomy_Image_describer::Params()));
+      SIFT_Anatomy_Image_describer::Params params;
+	  params.root_sift_ = bRootSift;
+      image_describer.reset(new SIFT_Anatomy_Image_describer(params));
     }
     else
     if (sImage_Describer_Method == "AKAZE_FLOAT")
@@ -217,8 +224,10 @@ int main(int argc, char **argv)
     else
     if (sImage_Describer_Method == "SIFT_GPU")
     {
-      image_describer.reset(
-        new SIFTGPU_Image_describer(SIFTGPU_Image_describer::Params()));
+      SIFTGPU_Image_describer::Params params;
+	  params.num_features_ = iMaxNumFeatures;
+	  params.root_sift_ = bRootSift;
+      image_describer.reset(new SIFTGPU_Image_describer(params));
     }
     if (!image_describer)
     {

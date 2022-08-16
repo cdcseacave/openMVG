@@ -4,7 +4,7 @@
 
 if (MSVC)
   # Disable warning about size_t conversions for all third_party libraries.
-  add_compile_options(/wd4267)
+  #add_compile_options(/wd4267) # breaks cuda compile
 endif()
 
 # Unit test library

@@ -38,7 +38,7 @@ void SIFTGPU_Image_describer::SetDevice(int nDevice /*=-1*/) {
 	if (strDevice.empty())
 		return;
 	const char* args[] = {
-		#ifdef _USE_CUDA
+		#ifdef USE_CUDA
 		"-cuda", // enable cuda
 		#endif
 		#if 0
@@ -105,19 +105,9 @@ void SIFTGPU_Image_describer::SetImageSizeMax(unsigned size) {
 	if (pSiftGPU_ == NULL)
 		return;
 	if (size == 0)
-		size = 3200;
+		size = 4096;
 	pSiftGPU_->SetMaxDimension(size);
 	pSiftGPU_->AllocatePyramid(size, size);
-}
-
-// check OpenGL is not using a known software renderer driver
-bool SIFTGPU_Image_describer::IsExecutedOnCPU() const {
-	assert(pSiftGPU_ != NULL);
-	const char* szRenderer = pSiftGPU_->GetRendererInfo();
-	if (szRenderer != NULL &&
-		std::string(szRenderer).find("llvm") == std::string::npos)
-		return false;
-	return true;
 }
 
 
@@ -133,9 +123,10 @@ bool SIFTGPU_Image_describer::Init() {
 	SetDOG(4, params_.peak_threshold_, params_.edge_threshold_);
 	SetFirstOctave(params_.first_octave_);
 	SetDarknessAdaptation(true);
-	SetFeaturesMax(params_.num_features_);
 	const int ret = pSiftGPU_->CreateContextGL();
 	assert(ret == SiftGPU::SIFTGPU_FULL_SUPPORTED);
+	SetFeaturesMax(params_.num_features_);
+	SetImageSizeMax(params_.max_image_size_);
 	return true;
 }
 

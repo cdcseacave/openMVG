@@ -29,6 +29,7 @@ public:
   {
     Params(
       int num_features = 0,
+      int max_image_size = 0,
       int first_octave = 0,
       int num_octaves = 6,
       int num_scales = 3,
@@ -37,6 +38,7 @@ public:
       bool root_sift = true
     ):
       num_features_(num_features),
+      max_image_size_(max_image_size),
       first_octave_(first_octave),
       num_octaves_(num_octaves),
       num_scales_(num_scales),
@@ -49,6 +51,7 @@ public:
 
     // Parameters
     int num_features_;      // Maximum number of features per image, 0 - no limit
+    int max_image_size_;    // Maximum image resolution, 0 - 4096
     int first_octave_;      // Use original image, or perform an upscale if == -1
     int num_octaves_;       // Max octaves count
     int num_scales_;        // Scales per octave
@@ -87,14 +90,13 @@ public:
     return true;
   }
 
-  void SetFeaturesMax(unsigned);
-  void SetImageSizeMax(unsigned);
   void SetDevice(int nDevice=-1);
   void SetFactor(float fFilterWidth=4.f, float fOrientationSampleWindow=2.f, float fDescriptorGridSize=3.f);
   void SetDOG(int nLevelsPerOctave=3, float fThreshold=0.02f/3, float fEdgeThreshold=10.f);
   void SetFirstOctave(int firstOctave=-1);
   void SetDarknessAdaptation(bool bEnable=true);
-  bool IsExecutedOnCPU() const;
+  void SetFeaturesMax(unsigned);
+  void SetImageSizeMax(unsigned);
 
   bool Init();
 

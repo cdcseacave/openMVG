@@ -71,7 +71,6 @@ int main(int argc, char **argv)
   bool bForce = false;
   std::string sFeaturePreset = "";
   int iMaxNumFeatures = 0;
-  bool bRootSift = true;
 #ifdef OPENMVG_USE_OPENMP
   int iNumThreads = 0;
 #endif
@@ -85,7 +84,6 @@ int main(int argc, char **argv)
   cmd.add( make_option('f', bForce, "force") );
   cmd.add( make_option('p', sFeaturePreset, "describerPreset") );
   cmd.add( make_option('x', iMaxNumFeatures, "maxNumFeatures") );
-  cmd.add( make_option('r', bRootSift, "rootSift") );
 
 #ifdef OPENMVG_USE_OPENMP
   cmd.add( make_option('n', iNumThreads, "numThreads") );
@@ -114,6 +112,7 @@ int main(int argc, char **argv)
         << "   NORMAL (default),\n"
         << "   HIGH,\n"
         << "   ULTRA: !!Can take long time!!\n"
+        << "[-x|--maxNumFeatures] Maximum number of features extracted per image\n"
 #ifdef OPENMVG_USE_OPENMP
         << "[-n|--numThreads] number of parallel computations\n"
 #endif
@@ -133,7 +132,6 @@ int main(int argc, char **argv)
     << "--describerPreset " << (sFeaturePreset.empty() ? "NORMAL" : sFeaturePreset) << "\n"
     << "--force " << bForce << "\n"
     << "--maxNumFeatures " << iMaxNumFeatures << "\n"
-    << "--rootSift " << bRootSift << "\n"
 #ifdef OPENMVG_USE_OPENMP
     << "--numThreads " << iNumThreads << "\n"
 #endif

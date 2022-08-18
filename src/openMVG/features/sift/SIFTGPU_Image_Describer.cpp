@@ -124,7 +124,7 @@ bool SIFTGPU_Image_describer::Init() {
 	SetFirstOctave(params_.first_octave_);
 	SetDarknessAdaptation(true);
 	const int ret = pSiftGPU_->CreateContextGL();
-	assert(ret == SiftGPU::SIFTGPU_FULL_SUPPORTED);
+	assert(ret != SiftGPU::SIFTGPU_NOT_SUPPORTED);
 	SetFeaturesMax(params_.num_features_);
 	SetImageSizeMax(params_.max_image_size_);
 	return true;

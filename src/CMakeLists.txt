@@ -167,7 +167,7 @@ if(USE_CUDA)
         set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Wno-deprecated-gpu-targets")
 		INCLUDE_DIRECTORIES(${CUDA_INCLUDE_DIRS})
 		list(APPEND CUDA_ARCHFLAGS ${CUDA_ARCH_FLAGS_list})
-		list(APPEND CUDA_LIBRARIES ${CUDA_CUDA_LIBRARY} ${CUDA_CUDART_LIBRARY})
+		list(APPEND CUDA_LIBRARIES ${CUDA_CUDART_LIBRARY})
         message(STATUS "Enabling CUDA support (version: ${CUDA_VERSION_STRING},"
                        " archs: ${CUDA_ARCH_FLAGS_readable})")
 	else()

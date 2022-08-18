@@ -204,7 +204,6 @@ int main(int argc, char **argv)
     if (sImage_Describer_Method == "SIFT_ANATOMY")
     {
       SIFT_Anatomy_Image_describer::Params params;
-	  params.root_sift_ = bRootSift;
       image_describer.reset(new SIFT_Anatomy_Image_describer(params));
     }
     else
@@ -223,8 +222,7 @@ int main(int argc, char **argv)
     if (sImage_Describer_Method == "SIFT_GPU")
     {
       SIFTGPU_Image_describer::Params params;
-	  params.num_features_ = iMaxNumFeatures;
-	  params.root_sift_ = bRootSift;
+      params.num_features_ = iMaxNumFeatures;
       image_describer.reset(new SIFTGPU_Image_describer(params));
     }
     if (!image_describer)

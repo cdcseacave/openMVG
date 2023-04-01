@@ -19,13 +19,14 @@
 #include "openMVG/types.hpp"
 
 // SfM Engines
+#include "openMVG/sfm/pipelines/global/GlobalSfM_rotation_averaging.hpp"
+#include "openMVG/sfm/pipelines/global/GlobalSfM_translation_averaging.hpp"
+#include "openMVG/sfm/pipelines/global/sfm_global_engine_relative_motions.hpp"
 #include "openMVG/sfm/pipelines/sequential/sequential_SfM.hpp"
 #include "openMVG/sfm/pipelines/sequential/sequential_SfM2.hpp"
 #include "openMVG/sfm/pipelines/sequential/SfmSceneInitializerMaxPair.hpp"
 #include "openMVG/sfm/pipelines/sequential/SfmSceneInitializerStellar.hpp"
-#include "openMVG/sfm/pipelines/global/GlobalSfM_rotation_averaging.hpp"
-#include "openMVG/sfm/pipelines/global/GlobalSfM_translation_averaging.hpp"
-#include "openMVG/sfm/pipelines/global/sfm_global_engine_relative_motions.hpp"
+#include "openMVG/sfm/pipelines/stellar/sfm_stellar_engine.hpp"
 
 #include "third_party/cmdLine/cmdLine.h"
 #include "third_party/stlplus3/filesystemSimplified/file_system.hpp"
@@ -52,7 +53,8 @@ enum class ESfMEngine
 {
   INCREMENTAL,
   INCREMENTALV2,
-  GLOBAL
+  GLOBAL,
+  STELLAR
 };
 
 bool StringToEnum
@@ -66,6 +68,7 @@ bool StringToEnum
     {"INCREMENTAL", ESfMEngine::INCREMENTAL},
     {"INCREMENTALV2", ESfMEngine::INCREMENTALV2},
     {"GLOBAL", ESfMEngine::GLOBAL},
+    {"STELLAR", ESfMEngine::STELLAR},
   };
   const auto it  = string_to_enum_mapping.find(str);
   if (it == string_to_enum_mapping.end())
@@ -94,6 +97,25 @@ bool StringToEnum
   return true;
 }
 
+bool StringToEnum_EGraphSimplification
+(
+  const std::string & str,
+  EGraphSimplification & graph_simplification
+)
+{
+  const std::map<std::string, EGraphSimplification> string_to_enum_mapping =
+  {
+    {"NONE", EGraphSimplification::NONE},
+    {"MST_X", EGraphSimplification::MST_X},
+    {"STAR_X", EGraphSimplification::STAR_X},
+  };
+  auto it = string_to_enum_mapping.find(str);
+  if (it == string_to_enum_mapping.end())
+    return false;
+  graph_simplification = it->second;
+  return true;
+}
+
 /// From 2 given image filenames, find the two corresponding index in the View list
 bool computeIndexFromImageNames(
   const SfM_Data & sfm_data,
@@ -110,7 +132,7 @@ bool computeIndexFromImageNames(
 
   /// List views filenames and find the one that correspond to the user ones:
   for (Views::const_iterator it = sfm_data.GetViews().begin();
-    it != sfm_data.GetViews().end(); ++it)
+     it != sfm_data.GetViews().end(); ++it)
   {
     const View * v = it->second.get();
     const std::string filename = stlplus::filename_part(v->s_Img_path);
@@ -118,7 +140,8 @@ bool computeIndexFromImageNames(
     {
       initialPairIndex.first = v->id_view;
     }
-    else{
+    else
+    {
       if (filename == initialPairName.second)
       {
         initialPairIndex.second = v->id_view;
@@ -131,20 +154,19 @@ bool computeIndexFromImageNames(
 
 int main(int argc, char **argv)
 {
-  using namespace std;
   OPENMVG_LOG_INFO
-    << "\n-----------------------------------------------------------"
-    << "\n Structure from Motion:"
-    << "\n-----------------------------------------------------------";
+      << "\n-----------------------------------------------------------"
+      << "\n Structure from Motion:"
+      << "\n-----------------------------------------------------------";
   CmdLine cmd;
 
   // Common options:
   std::string
-    filename_sfm_data,
-    directory_match,
-    filename_match,
-    directory_output,
-    engine_name = "INCREMENTAL";
+      filename_sfm_data,
+      directory_match,
+      filename_match,
+      directory_output,
+      engine_name = "INCREMENTAL";
 
   // Bundle adjustment options:
   std::string sIntrinsic_refinement_options = "ADJUST_ALL";
@@ -189,8 +211,13 @@ int main(int argc, char **argv)
   cmd.add( make_option('a', initial_pair_string.first, "initial_pair_a") );
   cmd.add( make_option('b', initial_pair_string.second, "initial_pair_b") );
   // Global SfM
-  cmd.add( make_option('r', rotation_averaging_method, "rotationAveraging") );
-  cmd.add( make_option('t', translation_averaging_method, "translationAveraging") );
+  cmd.add( make_option('R', rotation_averaging_method, "rotationAveraging") );
+  cmd.add( make_option('T', translation_averaging_method, "translationAveraging") );
+  // Stellar SfM
+  std::string graph_simplification = "MST_X";
+  int graph_simplification_value = 5;
+  cmd.add( make_option('G', graph_simplification, "graph_simplification") );
+  cmd.add( make_option('g', graph_simplification_value, "graph_simplification_value") );
 
   try {
     if (argc == 1) throw std::string("Invalid parameter.");
@@ -198,20 +225,21 @@ int main(int argc, char **argv)
   } catch (const std::string& s) {
 
     OPENMVG_LOG_INFO << "Usage: " << argv[0] << '\n'
-    << "[Required]\n"
-    << "[-i|--input_file] path to a SfM_Data scene\n"
-    << "[-m|--match_dir] path to the matches that corresponds to the provided SfM_Data scene\n"
-    << "[-o|--output_dir] path where the output data will be stored\n"
-    << "[-s|--sfm_engine] Type of SfM Engine to use for the reconstruction\n"
+      << "[Required]\n"
+      << "[-i|--input_file] path to a SfM_Data scene\n"
+      << "[-m|--match_dir] path to the matches that corresponds to the provided SfM_Data scene\n"
+      << "[-o|--output_dir] path where the output data will be stored\n"
+      << "[-s|--sfm_engine] Type of SfM Engine to use for the reconstruction\n"
       << "\t INCREMENTAL   : add image sequentially to a 2 view seed\n"
       << "\t INCREMENTALV2 : add image sequentially to a 2 or N view seed (experimental)\n"
       << "\t GLOBAL        : initialize globally rotation and translations\n"
-    << "\n\n"
-    << "[Optional parameters]\n"
-    << "\n\n"
-    << "[Common]\n"
-    << "[-M|--match_file] path to the match file to use (i.e matches.f.txt or matches.f.bin)\n"
-    << "[-f|--refine_intrinsic_config] Intrinsic parameters refinement option\n"
+      << "\t STELLAR       : n-uplets local motion refinements + global SfM\n"
+      << "\n\n"
+      << "[Optional parameters]\n"
+      << "\n\n"
+      << "[Common]\n"
+      << "[-M|--match_file] path to the match file to use (i.e matches.f.txt or matches.f.bin)\n"
+      << "[-f|--refine_intrinsic_config] Intrinsic parameters refinement option\n"
       << "\t ADJUST_ALL -> refine all existing parameters (default) \n"
       << "\t NONE -> intrinsic parameters are held as constant\n"
       << "\t ADJUST_FOCAL_LENGTH -> refine only the focal length\n"
@@ -219,71 +247,80 @@ int main(int argc, char **argv)
       << "\t ADJUST_DISTORTION -> refine only the distortion coefficient(s) (if any)\n"
       << "\t -> NOTE: options can be combined thanks to '|'\n"
       << "\t ADJUST_FOCAL_LENGTH|ADJUST_PRINCIPAL_POINT\n"
-      <<      "\t\t-> refine the focal length & the principal point position\n"
+      <<    "\t\t-> refine the focal length & the principal point position\n"
       << "\t ADJUST_FOCAL_LENGTH|ADJUST_DISTORTION\n"
-      <<      "\t\t-> refine the focal length & the distortion coefficient(s) (if any)\n"
+      <<    "\t\t-> refine the focal length & the distortion coefficient(s) (if any)\n"
       << "\t ADJUST_PRINCIPAL_POINT|ADJUST_DISTORTION\n"
-      <<      "\t\t-> refine the principal point position & the distortion coefficient(s) (if any)\n"
-    << "[-e|--refine_extrinsic_config] Extrinsic parameters refinement option\n"
+      <<    "\t\t-> refine the principal point position & the distortion coefficient(s) (if any)\n"
+      << "[-e|--refine_extrinsic_config] Extrinsic parameters refinement option\n"
       << "\t ADJUST_ALL -> refine all existing parameters (default) \n"
       << "\t NONE -> extrinsic parameters are held as constant\n"
-    << "[-P|--prior_usage] Enable usage of motion priors (i.e GPS positions) (default: false)\n"
-    << "\n\n"
-    << "[Engine specifics]\n"
-    << "\n\n"
-    << "[INCREMENTAL]\n"
-    << "\t[-a|--initial_pair_a] filename of the first image (without path)\n"
-    << "\t[-b|--initial_pair_b] filename of the second image (without path)\n"
-    << "\t[-c|--camera_model] Camera model type for view with unknown intrinsic:\n"
+      << "[-P|--prior_usage] Enable usage of motion priors (i.e GPS positions) (default: false)\n"
+      << "\n\n"
+      << "[Engine specifics]\n"
+      << "\n\n"
+      << "[INCREMENTAL]\n"
+      << "\t[-a|--initial_pair_a] filename of the first image (without path)\n"
+      << "\t[-b|--initial_pair_b] filename of the second image (without path)\n"
+      << "\t[-c|--camera_model] Camera model type for view with unknown intrinsic:\n"
       << "\t\t 1: Pinhole \n"
       << "\t\t 2: Pinhole radial 1\n"
       << "\t\t 3: Pinhole radial 3 (default)\n"
       << "\t\t 4: Pinhole radial 3 + tangential 2\n"
       << "\t\t 5: Pinhole fisheye\n"
-    << "\t[--triangulation_method] triangulation method (default=" << triangulation_method << "):\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::DIRECT_LINEAR_TRANSFORM) << ": DIRECT_LINEAR_TRANSFORM\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::L1_ANGULAR) << ": L1_ANGULAR\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::LINFINITY_ANGULAR) << ": LINFINITY_ANGULAR\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::INVERSE_DEPTH_WEIGHTED_MIDPOINT) << ": INVERSE_DEPTH_WEIGHTED_MIDPOINT\n"
-    << "\t[--resection_method] resection/pose estimation method (default=" << resection_method << "):\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::DLT_6POINTS) << ": DIRECT_LINEAR_TRANSFORM 6Points | does not use intrinsic data\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::P3P_KE_CVPR17) << ": P3P_KE_CVPR17\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::P3P_KNEIP_CVPR11) << ": P3P_KNEIP_CVPR11\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::P3P_NORDBERG_ECCV18) << ": P3P_NORDBERG_ECCV18\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::UP2P_KUKELOVA_ACCV10)  << ": UP2P_KUKELOVA_ACCV10 | 2Points | upright camera\n"
-    << "\n\n"
-    << "[INCREMENTALV2]\n"
-    << "\t[-S|--sfm_initializer] Choose the SfM initializer method:\n"
+      << "\t[--triangulation_method] triangulation method (default=" << triangulation_method << "):\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::DIRECT_LINEAR_TRANSFORM) << ": DIRECT_LINEAR_TRANSFORM\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::L1_ANGULAR) << ": L1_ANGULAR\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::LINFINITY_ANGULAR) << ": LINFINITY_ANGULAR\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::INVERSE_DEPTH_WEIGHTED_MIDPOINT) << ": INVERSE_DEPTH_WEIGHTED_MIDPOINT\n"
+      << "\t[--resection_method] resection/pose estimation method (default=" << resection_method << "):\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::DLT_6POINTS) << ": DIRECT_LINEAR_TRANSFORM 6Points | does not use intrinsic data\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::P3P_KE_CVPR17) << ": P3P_KE_CVPR17\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::P3P_KNEIP_CVPR11) << ": P3P_KNEIP_CVPR11\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::P3P_NORDBERG_ECCV18) << ": P3P_NORDBERG_ECCV18\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::UP2P_KUKELOVA_ACCV10)  << ": UP2P_KUKELOVA_ACCV10 | 2Points | upright camera\n"
+      << "\n\n"
+      << "[INCREMENTALV2]\n"
+      << "\t[-S|--sfm_initializer] Choose the SfM initializer method:\n"
       << "\t\t 'EXISTING_POSE'-> Initialize the reconstruction from the existing sfm_data camera poses\n"
       << "\t\t 'MAX_PAIR'-> Initialize the reconstruction from the pair that has the most of matches\n"
       << "\t\t 'AUTO_PAIR'-> Initialize the reconstruction with a pair selected automatically\n"
       << "\t\t 'STELLAR'-> Initialize the reconstruction with a 'stellar' reconstruction\n"
-    << "\t[-c|--camera_model] Camera model type for view with unknown intrinsic:\n"
+      << "\t[-c|--camera_model] Camera model type for view with unknown intrinsic:\n"
       << "\t\t 1: Pinhole \n"
       << "\t\t 2: Pinhole radial 1\n"
       << "\t\t 3: Pinhole radial 3 (default)\n"
       << "\t\t 4: Pinhole radial 3 + tangential 2\n"
       << "\t\t 5: Pinhole fisheye\n"
-    << "\t[--triangulation_method] triangulation method (default=" << triangulation_method << "):\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::DIRECT_LINEAR_TRANSFORM) << ": DIRECT_LINEAR_TRANSFORM\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::L1_ANGULAR) << ": L1_ANGULAR\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::LINFINITY_ANGULAR) << ": LINFINITY_ANGULAR\n"
-    << "\t\t" << static_cast<int>(ETriangulationMethod::INVERSE_DEPTH_WEIGHTED_MIDPOINT) << ": INVERSE_DEPTH_WEIGHTED_MIDPOINT\n"
-    << "\t[--resection_method] resection/pose estimation method (default=" << resection_method << "):\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::DLT_6POINTS) << ": DIRECT_LINEAR_TRANSFORM 6Points | does not use intrinsic data\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::P3P_KE_CVPR17) << ": P3P_KE_CVPR17\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::P3P_KNEIP_CVPR11) << ": P3P_KNEIP_CVPR11\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::P3P_NORDBERG_ECCV18) << ": P3P_NORDBERG_ECCV18\n"
-    << "\t\t" << static_cast<int>(resection::SolverType::UP2P_KUKELOVA_ACCV10)  << ": UP2P_KUKELOVA_ACCV10 | 2Points | upright camera\n"
-    << "\n\n"
-    << "[GLOBAL]\n"
-    << "\t[-r|--rotationAveraging]\n"
+      << "\t[--triangulation_method] triangulation method (default=" << triangulation_method << "):\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::DIRECT_LINEAR_TRANSFORM) << ": DIRECT_LINEAR_TRANSFORM\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::L1_ANGULAR) << ": L1_ANGULAR\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::LINFINITY_ANGULAR) << ": LINFINITY_ANGULAR\n"
+      << "\t\t" << static_cast<int>(ETriangulationMethod::INVERSE_DEPTH_WEIGHTED_MIDPOINT) << ": INVERSE_DEPTH_WEIGHTED_MIDPOINT\n"
+      << "\t[--resection_method] resection/pose estimation method (default=" << resection_method << "):\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::DLT_6POINTS) << ": DIRECT_LINEAR_TRANSFORM 6Points | does not use intrinsic data\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::P3P_KE_CVPR17) << ": P3P_KE_CVPR17\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::P3P_KNEIP_CVPR11) << ": P3P_KNEIP_CVPR11\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::P3P_NORDBERG_ECCV18) << ": P3P_NORDBERG_ECCV18\n"
+      << "\t\t" << static_cast<int>(resection::SolverType::UP2P_KUKELOVA_ACCV10)  << ": UP2P_KUKELOVA_ACCV10 | 2Points | upright camera\n"
+      << "\n\n"
+      << "[GLOBAL]\n"
+      << "\t[-R|--rotationAveraging]\n"
       << "\t\t 1 -> L1 minimization\n"
       << "\t\t 2 -> L2 minimization (default)\n"
-    << "\t[-t|--translationAveraging]:\n"
+      << "\t[-T|--translationAveraging]:\n"
       << "\t\t 1 -> L1 minimization\n"
       << "\t\t 2 -> L2 minimization of sum of squared Chordal distances\n"
-      << "\t\t 3 -> SoftL1 minimization (default)\n";
+      << "\t\t 3 -> SoftL1 minimization (default)\n"
+      << "\t\t 4 -> LiGT: Linear Global Translation constraints from rotation and matches\n"
+      << "[STELLAR]\n"
+      << "\t[-G|--graph_simplification]\n"
+      << "\t\t -> NONE\n"
+      << "\t\t -> MST_X\n"
+      << "\t\t -> STAR_X\n"
+      << "\t[-g|--graph_simplification_value]\n"
+      << "\t\t -> Number (default: " << graph_simplification_value << ")";
+
 
     OPENMVG_LOG_ERROR << s;
     return EXIT_FAILURE;
@@ -303,15 +340,15 @@ int main(int argc, char **argv)
   }
 
   const cameras::Intrinsic_Parameter_Type intrinsic_refinement_options =
-    cameras::StringTo_Intrinsic_Parameter_Type(sIntrinsic_refinement_options);
+      cameras::StringTo_Intrinsic_Parameter_Type(sIntrinsic_refinement_options);
   if (intrinsic_refinement_options == static_cast<cameras::Intrinsic_Parameter_Type>(0) )
   {
     OPENMVG_LOG_ERROR << "Invalid input for Bundle Adjustment Intrinsic parameter refinement option";
     return EXIT_FAILURE;
   }
 
-   const sfm::Extrinsic_Parameter_Type extrinsic_refinement_options =
-    sfm::StringTo_Extrinsic_Parameter_Type(sExtrinsic_refinement_options);
+  const sfm::Extrinsic_Parameter_Type extrinsic_refinement_options =
+      sfm::StringTo_Extrinsic_Parameter_Type(sExtrinsic_refinement_options);
   if (extrinsic_refinement_options == static_cast<sfm::Extrinsic_Parameter_Type>(0) )
   {
     OPENMVG_LOG_ERROR << "Invalid input for the Bundle Adjustment Extrinsic parameter refinement option";
@@ -338,9 +375,27 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+#ifndef USE_PATENTED_LIGT
+  if (translation_averaging_method == TRANSLATION_LIGT) {
+    OPENMVG_LOG_ERROR << "OpenMVG was not compiled with USE_PATENTED_LIGT cmake option";
+    return EXIT_FAILURE;
+  }
+#endif
   if (translation_averaging_method < TRANSLATION_AVERAGING_L1 ||
-      translation_averaging_method > TRANSLATION_AVERAGING_SOFTL1 )  {
+      translation_averaging_method > TRANSLATION_LIGT )  {
     OPENMVG_LOG_ERROR << "Translation averaging method is invalid";
+    return EXIT_FAILURE;
+  }
+
+  EGraphSimplification graph_simplification_method;
+  if (!StringToEnum_EGraphSimplification(graph_simplification, graph_simplification_method))
+  {
+    OPENMVG_LOG_ERROR << "Cannot recognize graph simplification method";
+    return EXIT_FAILURE;
+  }
+  if (graph_simplification_value <= 1)
+  {
+    OPENMVG_LOG_ERROR << "graph simplification value must be > 1";
     return EXIT_FAILURE;
   }
 
@@ -354,8 +409,8 @@ int main(int argc, char **argv)
   // Load input SfM_Data scene
   SfM_Data sfm_data;
   const ESfM_Data sfm_data_loading_etypes =
-    scene_initializer_enum == ESfMSceneInitializer::INITIALIZE_EXISTING_POSES ?
-      ESfM_Data(VIEWS|INTRINSICS|EXTRINSICS) : ESfM_Data(VIEWS|INTRINSICS);
+      scene_initializer_enum == ESfMSceneInitializer::INITIALIZE_EXISTING_POSES ?
+        ESfM_Data(VIEWS|INTRINSICS|EXTRINSICS) : ESfM_Data(VIEWS|INTRINSICS);
   if (!Load(sfm_data, filename_sfm_data, sfm_data_loading_etypes)) {
     OPENMVG_LOG_ERROR << "The input SfM_Data file \""<< filename_sfm_data << "\" cannot be read.";
     return EXIT_FAILURE;
@@ -399,12 +454,12 @@ int main(int argc, char **argv)
   std::shared_ptr<Matches_Provider> matches_provider = std::make_shared<Matches_Provider>();
   if // Try to read the provided match filename or the default one (matches.f.txt/bin)
   (
-    !(matches_provider->load(sfm_data, stlplus::create_filespec(directory_match, filename_match)) ||
+  !(matches_provider->load(sfm_data, stlplus::create_filespec(directory_match, filename_match)) ||
       matches_provider->load(sfm_data, stlplus::create_filespec(directory_match, "matches.f.txt")) ||
       matches_provider->load(sfm_data, stlplus::create_filespec(directory_match, "matches.f.bin")) ||
       matches_provider->load(sfm_data, stlplus::create_filespec(directory_match, "matches.e.txt")) ||
       matches_provider->load(sfm_data, stlplus::create_filespec(directory_match, "matches.e.bin")))
-  )
+      )
   {
     OPENMVG_LOG_ERROR << "Cannot load the match file.";
     return EXIT_FAILURE;
@@ -413,28 +468,28 @@ int main(int argc, char **argv)
   std::unique_ptr<SfMSceneInitializer> scene_initializer;
   switch(scene_initializer_enum)
   {
-    case ESfMSceneInitializer::INITIALIZE_AUTO_PAIR:
-      OPENMVG_LOG_ERROR << "Not yet implemented.";
-      return EXIT_FAILURE;
+  case ESfMSceneInitializer::INITIALIZE_AUTO_PAIR:
+    OPENMVG_LOG_ERROR << "Not yet implemented.";
+    return EXIT_FAILURE;
     break;
-    case ESfMSceneInitializer::INITIALIZE_MAX_PAIR:
-      scene_initializer.reset(new SfMSceneInitializerMaxPair(sfm_data,
-        feats_provider.get(),
-        matches_provider.get()));
+  case ESfMSceneInitializer::INITIALIZE_MAX_PAIR:
+    scene_initializer.reset(new SfMSceneInitializerMaxPair(sfm_data,
+                                 feats_provider.get(),
+                                 matches_provider.get()));
     break;
-    case ESfMSceneInitializer::INITIALIZE_EXISTING_POSES:
-      scene_initializer.reset(new SfMSceneInitializer(sfm_data,
-        feats_provider.get(),
-        matches_provider.get()));
+  case ESfMSceneInitializer::INITIALIZE_EXISTING_POSES:
+    scene_initializer.reset(new SfMSceneInitializer(sfm_data,
+                            feats_provider.get(),
+                            matches_provider.get()));
     break;
-    case ESfMSceneInitializer::INITIALIZE_STELLAR:
-      scene_initializer.reset(new SfMSceneInitializerStellar(sfm_data,
-        feats_provider.get(),
-        matches_provider.get()));
+  case ESfMSceneInitializer::INITIALIZE_STELLAR:
+    scene_initializer.reset(new SfMSceneInitializerStellar(sfm_data,
+                                 feats_provider.get(),
+                                 matches_provider.get()));
     break;
-    default:
-      OPENMVG_LOG_ERROR << "Unknown SFM Scene initializer method";
-      return EXIT_FAILURE;
+  default:
+    OPENMVG_LOG_ERROR << "Unknown SFM Scene initializer method";
+    return EXIT_FAILURE;
   }
   if (!scene_initializer)
   {
@@ -449,10 +504,10 @@ int main(int argc, char **argv)
   case ESfMEngine::INCREMENTAL:
   {
     SequentialSfMReconstructionEngine * engine =
-      new SequentialSfMReconstructionEngine(
-        sfm_data,
-        directory_output,
-        stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
+        new SequentialSfMReconstructionEngine(
+          sfm_data,
+          directory_output,
+          stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
 
     // Configuration:
     engine->SetFeaturesProvider(feats_provider.get());
@@ -460,7 +515,6 @@ int main(int argc, char **argv)
 
     // Configure reconstruction parameters
     engine->SetUnknownCameraType(EINTRINSIC(user_camera_model));
-    engine->Set_Use_Motion_Prior(b_use_motion_priors);
     engine->SetTriangulationMethod(static_cast<ETriangulationMethod>(triangulation_method));
     engine->SetResectionMethod(static_cast<resection::SolverType>(resection_method));
 
@@ -470,8 +524,8 @@ int main(int argc, char **argv)
       Pair initial_pair_index;
       if (!computeIndexFromImageNames(sfm_data, initial_pair_string, initial_pair_index))
       {
-          OPENMVG_LOG_ERROR << "Could not find the initial pairs <" << initial_pair_string.first
-            <<  ", " << initial_pair_string.second << ">!";
+        OPENMVG_LOG_ERROR << "Could not find the initial pairs <" << initial_pair_string.first
+                  <<  ", " << initial_pair_string.second << ">!";
         return EXIT_FAILURE;
       }
       engine->setInitialPair(initial_pair_index);
@@ -483,41 +537,35 @@ int main(int argc, char **argv)
   case ESfMEngine::INCREMENTALV2:
   {
     SequentialSfMReconstructionEngine2 * engine =
-      new SequentialSfMReconstructionEngine2(
-        scene_initializer.get(),
-        sfm_data,
-        directory_output,
-        stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
+        new SequentialSfMReconstructionEngine2(
+          scene_initializer.get(),
+          sfm_data,
+          directory_output,
+          stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
 
     // Configuration:
     engine->SetFeaturesProvider(feats_provider.get());
     engine->SetMatchesProvider(matches_provider.get());
 
     // Configure reconstruction parameters
-    engine->Set_Intrinsics_Refinement_Type(intrinsic_refinement_options);
-    engine->SetUnknownCameraType(EINTRINSIC(user_camera_model));
-    engine->Set_Use_Motion_Prior(b_use_motion_priors);
     engine->SetTriangulationMethod(static_cast<ETriangulationMethod>(triangulation_method));
+    engine->SetUnknownCameraType(EINTRINSIC(user_camera_model));
     engine->SetResectionMethod(static_cast<resection::SolverType>(resection_method));
 
     sfm_engine.reset(engine);
   }
-  break;
+    break;
   case ESfMEngine::GLOBAL:
   {
     GlobalSfMReconstructionEngine_RelativeMotions * engine =
-      new GlobalSfMReconstructionEngine_RelativeMotions(
-        sfm_data,
-        directory_output,
-        stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
+        new GlobalSfMReconstructionEngine_RelativeMotions(
+          sfm_data,
+          directory_output,
+          stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
 
     // Configuration:
     engine->SetFeaturesProvider(feats_provider.get());
     engine->SetMatchesProvider(matches_provider.get());
-
-    // Configure reconstruction parameters
-    engine->Set_Intrinsics_Refinement_Type(intrinsic_refinement_options);
-    engine->Set_Use_Motion_Prior(b_use_motion_priors);
 
     // Configure motion averaging method
     engine->SetRotationAveragingMethod(ERotationAveragingMethod(rotation_averaging_method));
@@ -526,8 +574,26 @@ int main(int argc, char **argv)
     sfm_engine.reset(engine);
   }
   break;
+  case ESfMEngine::STELLAR:
+  {
+    StellarSfMReconstructionEngine * engine =
+      new StellarSfMReconstructionEngine(
+        sfm_data,
+        directory_output,
+        stlplus::create_filespec(directory_output, "Reconstruction_Report.html"));
+
+    // Configure the features_provider & the matches_provider
+    engine->SetFeaturesProvider(feats_provider.get());
+    engine->SetMatchesProvider(matches_provider.get());
+
+    // Configure reconstruction parameters
+    engine->SetGraphSimplification(graph_simplification_method, graph_simplification_value);
+
+    sfm_engine.reset(engine);
+  }
+  break;
   default:
-    break;
+  break;
   }
   if (!sfm_engine)
   {
@@ -537,6 +603,7 @@ int main(int argc, char **argv)
 
   sfm_engine->Set_Intrinsics_Refinement_Type(intrinsic_refinement_options);
   sfm_engine->Set_Extrinsics_Refinement_Type(extrinsic_refinement_options);
+  sfm_engine->Set_Use_Motion_Prior(b_use_motion_priors);
 
   //---------------------------------------
   // Sequential reconstruction process
@@ -550,17 +617,17 @@ int main(int argc, char **argv)
 
     OPENMVG_LOG_INFO << "...Generating SfM_Report.html";
     Generate_SfM_Report(sfm_engine->Get_SfM_Data(),
-      stlplus::create_filespec(directory_output, "SfMReconstruction_Report.html"));
+              stlplus::create_filespec(directory_output, "SfMReconstruction_Report.html"));
 
     //-- Export to disk computed scene (data & viewable results)
     OPENMVG_LOG_INFO << "...Export SfM_Data to disk.";
     Save(sfm_engine->Get_SfM_Data(),
-      stlplus::create_filespec(directory_output, "sfm_data", ".bin"),
-      ESfM_Data(ALL));
+       stlplus::create_filespec(directory_output, "sfm_data", ".bin"),
+       ESfM_Data(ALL));
 
     Save(sfm_engine->Get_SfM_Data(),
-      stlplus::create_filespec(directory_output, "cloud_and_poses", ".ply"),
-      ESfM_Data(ALL));
+       stlplus::create_filespec(directory_output, "cloud_and_poses", ".ply"),
+       ESfM_Data(ALL));
 
     return EXIT_SUCCESS;
   }

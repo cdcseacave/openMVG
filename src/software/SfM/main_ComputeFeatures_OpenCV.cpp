@@ -214,6 +214,7 @@ public:
     // Create a Keypoints & Descriptors container
     std::vector< cv::KeyPoint > v_keypoints;
     cv::Mat m_desc;
+    cv::Ptr<cv::Feature2D> siftdetector = cv::SIFT::create();
 
     // Process SIFT computation
     siftdetector->detectAndCompute(img, m_mask, v_keypoints, m_desc);

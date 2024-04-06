@@ -109,9 +109,10 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic
 
   // Enum to map intrinsics parameters between openMVG & ceres camera data parameter block.
   enum : uint8_t {
-    OFFSET_FOCAL_LENGTH = 0,
-    OFFSET_PRINCIPAL_POINT_X = 1,
-    OFFSET_PRINCIPAL_POINT_Y = 2
+    OFFSET_FOCAL_LENGTH_X = 0,
+    OFFSET_FOCAL_LENGTH_Y = 1,
+    OFFSET_PRINCIPAL_POINT_X = 2,
+    OFFSET_PRINCIPAL_POINT_Y = 3
   };
 
   /**
@@ -149,7 +150,8 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic
     // Apply intrinsic parameters
     //--
 
-    const T& focal = cam_intrinsics[OFFSET_FOCAL_LENGTH];
+    const T& focal_x = cam_intrinsics[OFFSET_FOCAL_LENGTH_X];
+    const T& focal_y = cam_intrinsics[OFFSET_FOCAL_LENGTH_Y];
     const T& principal_point_x = cam_intrinsics[OFFSET_PRINCIPAL_POINT_X];
     const T& principal_point_y = cam_intrinsics[OFFSET_PRINCIPAL_POINT_Y];
 
@@ -158,8 +160,8 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic
     // Compute and return the error is the difference between the predicted
     //  and observed position
     Eigen::Map<Eigen::Matrix<T, 2, 1>> residuals(out_residuals);
-    residuals << principal_point_x + projected_point.x() * focal - m_pos_2dpoint[0],
-                 principal_point_y + projected_point.y() * focal - m_pos_2dpoint[1];
+    residuals << principal_point_x + projected_point.x() * focal_x - m_pos_2dpoint[0],
+                 principal_point_y + projected_point.y() * focal_y - m_pos_2dpoint[1];
     return true;
   }
 
@@ -177,14 +179,14 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic
     {
       return
         (new ceres::AutoDiffCostFunction
-          <ResidualErrorFunctor_Pinhole_Intrinsic, 2, 3, 6, 3>(
+          <ResidualErrorFunctor_Pinhole_Intrinsic, 2, 4, 6, 3>(
             new ResidualErrorFunctor_Pinhole_Intrinsic(observation.data())));
     }
     else
     {
       return
         (new ceres::AutoDiffCostFunction
-          <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic>, 2, 3, 6, 3>
+          <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic>, 2, 4, 6, 3>
           (new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic>
             (new ResidualErrorFunctor_Pinhole_Intrinsic(observation.data()), weight)));
     }

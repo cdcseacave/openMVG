@@ -160,6 +160,9 @@ bool exportToOpenMVS(
     const std::string mask_filename_local = stlplus::create_filespec(sfm_data.s_root_path, stlplus::basename_part(srcImage) + "_mask", "png");
     const std::string maskName = stlplus::create_filespec(sOutDir, stlplus::basename_part(srcImage) + ".mask.png");
 
+    const std::string pathName = stlplus::folder_part(imageName);
+    if (!stlplus::is_folder(pathName))
+        stlplus::folder_create(pathName);
 
     if (sfm_data.IsPoseAndIntrinsicDefined(view))
     {

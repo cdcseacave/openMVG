@@ -61,6 +61,16 @@ class Pinhole_Intrinsic : public IntrinsicBase
       K_ << focal_length_pix, 0., ppx, 0., focal_length_pix, ppy, 0., 0., 1.;
       Kinv_ = K_.inverse();
     }
+    Pinhole_Intrinsic(
+      unsigned int w, unsigned int h,
+      double focal_length_pix_x,
+      double focal_length_pix_y,
+      double ppx, double ppy )
+      : IntrinsicBase( w, h )
+    {
+      K_ << focal_length_pix_x, 0., ppx, 0., focal_length_pix_y, ppy, 0., 0., 1.;
+      Kinv_ = K_.inverse();
+    }
 
     /**
     * @brief Constructor
@@ -119,6 +129,10 @@ class Pinhole_Intrinsic : public IntrinsicBase
     {
       return K_( 0, 0 );
     }
+    inline Vec2 focal_length() const
+    {
+      return {K_( 0, 0 ), K_( 1, 1 )};
+    }
 
     /**
     * @brief Get principal point of the camera
@@ -145,7 +159,7 @@ class Pinhole_Intrinsic : public IntrinsicBase
     */
     Vec2 cam2ima( const Vec2& p ) const override
     {
-      return focal() * p + principal_point();
+      return  p.cwiseProduct(focal_length()) + principal_point();
     }
 
     /**
@@ -155,7 +169,7 @@ class Pinhole_Intrinsic : public IntrinsicBase
     */
     Vec2 ima2cam( const Vec2& p ) const override
     {
-      return ( p -  principal_point() ) / focal();
+      return (p -  principal_point()).cwiseQuotient(focal_length());
     }
 
     /**
@@ -214,7 +228,7 @@ class Pinhole_Intrinsic : public IntrinsicBase
     */
     std::vector<double> getParams() const override
     {
-      return  { K_(0, 0), K_(0, 2), K_(1, 2) };
+      return  { K_(0, 0), K_(1, 1), K_(0, 2), K_(1, 2) };
     }
 
 
@@ -226,9 +240,9 @@ class Pinhole_Intrinsic : public IntrinsicBase
     */
     bool updateFromParams(const std::vector<double> & params) override
     {
-      if ( params.size() == 3 )
+      if ( params.size() == 4 )
       {
-        *this = Pinhole_Intrinsic( w_, h_, params[0], params[1], params[2] );
+        *this = Pinhole_Intrinsic( w_, h_, params[0], params[1], params[2], params[3] );
         return true;
       }
       else
@@ -250,12 +264,12 @@ class Pinhole_Intrinsic : public IntrinsicBase
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_FOCAL_LENGTH)
            || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), 0);
+        constant_index.insert(constant_index.end(), {0, 1});
       }
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_PRINCIPAL_POINT)
           || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), {1, 2});
+        constant_index.insert(constant_index.end(), {2, 3});
       }
       return constant_index;
     }
